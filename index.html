@@ -5,52 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>내 방명록</title>
     <style>
-        body {
-            font-family: 'Noto Sans KR', sans-serif;
-            text-align: center;
-            background-color: #f0f2f5;
-            padding-top: 50px;
-        }
-        .container {
-            background-color: white;
-            width: 300px;
-            margin: 0 auto;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        body { font-family: 'Noto Sans KR', sans-serif; text-align: center; background-color: #f0f2f5; padding-top: 50px; }
+        .container { background-color: white; width: 300px; margin: 0 auto; padding: 30px; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #333; font-size: 24px; margin-bottom: 20px; }
-        input {
-            width: 80%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        button {
-            width: 90%;
-            padding: 10px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
+        input { width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 90%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
 
-        /* 방명록 글이 보이는 카드 디자인 추가 */
-        .msg-card {
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 15px;
-            text-align: left;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
+        .msg-card { background-color: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-top: 15px; text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; }
         .msg-info { font-size: 12px; color: #888; margin-bottom: 5px; }
         .msg-text { font-size: 16px; color: #333; font-weight: bold; }
+        
+        /* 삭제 버튼 디자인 추가 */
+        .delete-btn {
+            position: absolute; /* 카드 안에서 위치를 자유롭게 잡기 위해 */
+            top: 10px; right: 10px; /* 오른쪽 위 구석에 배치 */
+            background-color: #ff4d4d; /* 빨간색 */
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: auto; /* 내용물만큼만 크기 잡기 */
+        }
+        .delete-btn:hover { background-color: #cc0000; }
     </style>
 </head>
 <body>
@@ -60,16 +39,14 @@
         <input type="text" id="name" placeholder="이름 (닉네임)">
         <input type="text" id="msg" placeholder="하고 싶은 말">
         <button id="saveBtn">저장하기</button>
-        
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
-        
         <div id="list"></div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-        // 'getDocs'와 'query', 'orderBy'를 추가로 가져옵니다.
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+        // [중요] deleteDoc(삭제 도구)과 doc(문서 위치 찾는 도구)을 추가로 가져왔습니다.
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAY_l2zowbwEYJw2qDGBLVh3rC1lLxXL5c",
@@ -83,57 +60,59 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 1. 저장하기 기능
+        // 저장하기 기능 (이전과 동일)
         document.getElementById("saveBtn").addEventListener("click", async function() {
             const name = document.getElementById("name").value;
             const msg = document.getElementById("msg").value;
-
-            if(msg.length < 1) {
-                alert("내용을 입력해주세요!");
-                return;
-            }
-
+            if(msg.length < 1) { alert("내용을 입력해주세요!"); return; }
             try {
                 await addDoc(collection(db, "guestbook"), {
-                    name: name,
-                    message: msg,
-                    date: new Date().toLocaleString()
+                    name: name, message: msg, date: new Date().toLocaleString()
                 });
-                alert("저장 성공!");
                 window.location.reload(); 
-            } catch (e) {
-                console.error("Error adding document: ", e);
-                alert("에러 발생");
-            }
+            } catch (e) { console.error("Error", e); alert("에러 발생"); }
         });
 
-        // 2. 불러오기 기능 (페이지 열리면 바로 실행)
+        // 불러오기 + 삭제하기 기능
         async function loadData() {
             const listDiv = document.getElementById("list");
-            
-            // guestbook 컬렉션에 있는 모든 데이터를 가져와!
             const querySnapshot = await getDocs(collection(db, "guestbook"));
             
-            // 하나씩 꺼내서 화면에 그리기
-            querySnapshot.forEach((doc) => {
-                const data = doc.data(); // 데이터 꺼내기
+            querySnapshot.forEach((documentObj) => {
+                const data = documentObj.data();
                 
-                // HTML 덩어리를 만듭니다
+                // [설명 1] 이 글의 주민등록번호(ID)를 알아냅니다.
+                const docId = documentObj.id; 
+
                 const card = document.createElement("div");
                 card.className = "msg-card";
+                
                 card.innerHTML = `
                     <div class="msg-info">${data.name} 님 (${data.date})</div>
                     <div class="msg-text">${data.message}</div>
                 `;
-                
-                // 만든 카드를 화면에 붙입니다
+
+                // [설명 2] 삭제 버튼을 만듭니다.
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "delete-btn";
+                deleteBtn.innerText = "삭제";
+
+                // [설명 3] 삭제 버튼을 누르면 벌어질 일(이벤트)을 등록합니다.
+                deleteBtn.addEventListener("click", async function() {
+                    if(confirm("진짜 지울까요?")) {
+                        // [설명 4] 파이어베이스야, 'guestbook' 방에 있는 'docId'라는 이름의 글을 지워줘!
+                        await deleteDoc(doc(db, "guestbook", docId));
+                        alert("삭제되었습니다.");
+                        window.location.reload(); // 새로고침
+                    }
+                });
+
+                // 카드 안에 삭제 버튼을 붙입니다.
+                card.appendChild(deleteBtn);
                 listDiv.appendChild(card);
             });
         }
-
-        // 페이지 로드 시 loadData 실행
         loadData();
-
     </script>
 </body>
 </html>
